@@ -27,8 +27,8 @@ struct gemmini_state_t
   void reset();
 
   // Matrix Addresses & Sizes
-  reg_t A_addr, B_addr, C_addr, D_addr;
-  reg_t M, N, K; 
+  reg_t a_addr, b_addr, c_addr, d_addr;
+  reg_t m, n, k;
 
   // 32-bit gemmini address space
   uint32_t output_sp_addr;
