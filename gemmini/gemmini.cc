@@ -285,6 +285,13 @@ reg_t gemmini_t::custom3(rocc_insn_t insn, reg_t xs1, reg_t xs2) {
     compute(xs1, xs2, false);
   else if (insn.funct == flush_funct) {
     dprintf("GEMMINI: flush\n");
+  } else if (insn.funct == config_addr_AB_funct || 
+    insn.funct == config_addr_CD_funct || 
+    insn.funct == config_size0_funct || 
+    insn.funct == config_size1_funct || 
+    insn.funct == config_reset 
+  ) {
+    dprintf("GEMMINI: PENDING INSTRUCTION");
   }
   else {
     dprintf("GEMMINI: encountered unknown instruction with funct: %d\n", insn.funct);

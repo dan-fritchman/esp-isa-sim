@@ -26,6 +26,10 @@ struct gemmini_state_t
   enum Activation {NONE, RELU, RELU6};
   void reset();
 
+  // Matrix Addresses & Sizes
+  reg_t A_addr, B_addr, C_addr, D_addr;
+  reg_t M, N, K; 
+
   // 32-bit gemmini address space
   uint32_t output_sp_addr;
   uint32_t preload_sp_addr;
@@ -67,6 +71,12 @@ private:
   const unsigned compute_accumulated_funct = 5;
   const unsigned preload_funct = 6;
   const unsigned flush_funct = 7;
+
+  const unsigned config_addr_AB_funct = 10;
+  const unsigned config_addr_CD_funct = 11;
+  const unsigned config_size0_funct = 12;
+  const unsigned config_size1_funct = 13;
+  const unsigned config_reset = 14;
 
   bool debug;
   input_t apply_activation(input_t value);
