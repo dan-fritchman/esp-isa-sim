@@ -54,6 +54,28 @@ T gemmini_t::read_from_dram(reg_t addr) {
 }
 
 template <class T>
+auto matrix_zeroes(reg_t rows, reg_t cols) {
+  return new std::vector<std::vector<T>>(rows, std::vector<T>(cols, 0));
+}
+
+template <class T>
+auto gemmini_t::read_matrix_from_dram(reg_t addr, reg_t rows, reg_t cols) {
+  // Read and return Matrix of size `rows*cols` from address `addr` in main memory
+  
+  // Initialize to all zeroes
+  auto result = matrix_zeroes<T>(rows, cols);
+  // Load from memory 
+  for (size_t i = 0; i < rows; i++) {
+    auto const dram_row_addr = addr + i*sizeof(T)*cols;
+    for (size_t j = 0; j < cols; j++) {
+      auto const dram_byte_addr = dram_row_addr + j*sizeof(T);
+      result->at(i).at(j) = gemmini_t::read_from_dram<T>(dram_byte_addr);
+    }
+  }
+  return result;
+}
+
+template <class T>
 void gemmini_t::write_to_dram(reg_t addr, T data) {
   for (size_t byte_idx = 0; byte_idx < sizeof(T); ++byte_idx) {
     p->get_mmu()->store_uint8(addr + byte_idx, (data >> (byte_idx*8)) & 0xFF);
@@ -113,49 +135,39 @@ void gemmini_t::setmode(reg_t rs1, reg_t rs2) {
 }
 
 void gemmini_t::compute(reg_t a_addr, reg_t bd_addr, bool preload) {
-  auto a_addr_real = static_cast<uint32_t>(a_addr & 0xFFFFFFFF);
-  auto bd_addr_real = static_cast<uint32_t>(bd_addr & 0xFFFFFFFF);
+  // `compute` performs Gemmini's core function - matrix multiply-add - without referencing any underlying hardware detail.
+  // 
+  // * Operands A, B, and D are loaded from memory
+  // * Multiply, add, activation, and any requested shifts are performed
+  // * Result D is written back to memory
+  // 
+  // These computations are made independent of systolic array sizes, scratchpad-memory sizes, 
+  // and any other microarchitectural detail (other than datatypes). 
+  
 
-  auto A = new std::vector<std::vector<input_t>>(gemmini_state.m, std::vector<input_t>(gemmini_state.n));
-  auto B = new std::vector<std::vector<input_t>>(gemmini_state.n, std::vector<input_t>(gemmini_state.k));
-  auto D = new std::vector<std::vector<input_t>>(gemmini_state.m, std::vector<input_t>(gemmini_state.k));
-  auto result = new std::vector<std::vector<input_t>>(gemmini_state.m, std::vector<input_t>(gemmini_state.k, 0));
-
-  // Load from memory 
-  for (size_t i = 0; i < gemmini_state.m; i++) {
-    auto const dram_row_addr = gemmini_state.a_addr + i*sizeof(input_t)*gemmini_state.n;
-    for (size_t j = 0; j < gemmini_state.n; j++) {
-      auto const dram_byte_addr = dram_row_addr + j*sizeof(input_t);
-      A->at(i).at(j) = read_from_dram<input_t>(dram_byte_addr);
-    }
-  }
-  for (size_t i = 0; i < gemmini_state.n; i++) {
-    auto const dram_row_addr = gemmini_state.b_addr + i*sizeof(input_t)*gemmini_state.k;
-    for (size_t j = 0; j < gemmini_state.k; j++) {
-      auto const dram_byte_addr = dram_row_addr + j*sizeof(input_t);
-      B->at(i).at(j) = read_from_dram<input_t>(dram_byte_addr);
-    }
-  }
-  for (size_t i = 0; i < gemmini_state.m; i++) {
-    auto const dram_row_addr = gemmini_state.d_addr + i*sizeof(input_t)*gemmini_state.k;
-    for (size_t j = 0; j < gemmini_state.k; j++) {
-      auto const dram_byte_addr = dram_row_addr + j*sizeof(input_t);
-      D->at(i).at(j) = read_from_dram<input_t>(dram_byte_addr);
-    }
-  }
+  // FIXME: all three parameters are now ignored. Drop them. 
+  // FIXME: error check state has been set up
+  
+  // Load operands from memory
+  // FIXME: incorporate zero-value/ special address
+  auto A = read_matrix_from_dram<input_t>(gemmini_state.a_addr, gemmini_state.m, gemmini_state.n);
+  auto B = read_matrix_from_dram<input_t>(gemmini_state.b_addr, gemmini_state.n, gemmini_state.k);
+  auto D = read_matrix_from_dram<input_t>(gemmini_state.d_addr, gemmini_state.m, gemmini_state.k);
+  // Initialize an accumulator/ result 
+  auto result = matrix_zeroes<accum_t>(gemmini_state.m, gemmini_state.k);
 
   // Multiply & apply activation
   for (size_t x=0; x<gemmini_state.m; x++) {
-    for (size_t j=0; j<gemmini_state.k; j++) {
-      accum_t value = D->at(x).at(j);
-      for (size_t k=0; k<gemmini_state.n; k++) {
-        value += A->at(x).at(k) * B->at(k).at(j);
+    for (size_t y=0; y<gemmini_state.k; y++) {
+      accum_t value = D->at(x).at(y);
+      for (size_t z=0; z<gemmini_state.n; z++) {
+        value += A->at(x).at(z) * B->at(z).at(y);
       }
       input_t shifted = gemmini_state.mode == gemmini_state_t::OS ?
                              rounding_saturating_shift<input_t>(value, gemmini_state.sys_shift) :
                              rounding_saturating_shift<input_t>(value, 0);
       input_t activated = apply_activation(shifted);
-      result->at(x).at(j) = activated;
+      result->at(x).at(y) = activated;
     }
   }
   

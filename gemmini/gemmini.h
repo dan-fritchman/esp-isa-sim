@@ -88,6 +88,9 @@ private:
   T read_from_dram(reg_t addr);
 
   template <class T>
+  auto read_matrix_from_dram(reg_t addr, reg_t rows, reg_t cols);
+
+  template <class T>
   void write_to_dram(reg_t addr, T data);
 };
 
